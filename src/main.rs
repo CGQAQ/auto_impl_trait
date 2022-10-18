@@ -1,6 +1,7 @@
 use auto_impl_trait::auto_impl_trait;
 
 #[auto_impl_trait("./src/rect_trait.rs")]
+#[doc = "hehehheheh"]
 struct Square {
     side: i32,
 }

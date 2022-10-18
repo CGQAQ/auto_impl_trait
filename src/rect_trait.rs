@@ -1,6 +1,10 @@
-trait Rect {
-    fn area(&self) -> i32;
-    fn perimeter(&self) -> i32;
+use std::ops::{ Add, Sub, Mul, Div };
 
-    fn scale(&mut self, scale: i32);
+trait Rect {
+    type Item: Add + Sub + Mul + Div;
+
+    fn area(&self) -> Item;
+    fn perimeter(&self) -> Item;
+
+    fn scale(&mut self, scale: Item);
 }

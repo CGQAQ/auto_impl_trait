@@ -1,11 +1,11 @@
 extern crate core;
 
-use proc_macro::TokenStream;
-use syn::{FnArg, parse_macro_input};
+use proc_macro::{TokenStream};
+use syn::{FnArg, Item, parse_macro_input, TraitItem};
 
 use quote::{quote, ToTokens};
 
-use change_case::pascal_case;
+use change_case::{pascal_case, snake_case};
 
 struct Trait(pub syn::LitStr);
 
@@ -32,7 +32,12 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
     let trait_content = std::fs::read_to_string(trait_location.0.value())
         .expect("Something went wrong reading the file");
 
-    let trait_meta = syn::parse_str::<syn::ItemTrait>(trait_content.as_str()).unwrap();
+    let file = syn::parse_str::<syn::File>(trait_content.as_str()).unwrap();
+
+    let trait_meta =  file.items.iter().find_map(|it| match it {
+        Item::Trait(it) => Some(it),
+        _ => None
+    }).expect("expect trait in file");
 
     let trait_name = trait_meta.ident.clone();
     let trait_functions = trait_meta.items.clone();
@@ -41,13 +46,20 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
         .clone()
         .iter()
         .map(|it| {
-            if let syn::TraitItem::Method(method) = it {
-                let method_name = method.sig.ident.clone();
-                return quote! {
-                    mod #method_name;
-                };
-            } else {
-                panic!("Expected a method");
+            match it {
+                TraitItem::Method(method) => {
+                    let method_name = method.sig.ident.clone();
+                    return quote! {
+                        mod #method_name;
+                    };
+                }
+                TraitItem::Type(ty) => {
+                    let ty_name = quote::format_ident!("{}", snake_case(ty.ident.clone().to_string().as_str()));
+                    return quote! {
+                        mod #ty_name;
+                    }
+                }
+                _ => { panic!("Expect Method or Type") }
             }
         })
         .collect::<Vec<_>>();
