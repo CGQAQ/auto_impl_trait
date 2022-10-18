@@ -1,7 +1,9 @@
-use proc_macro::TokenStream;
-use syn::parse_macro_input;
+extern crate core;
 
-use quote::quote;
+use proc_macro::TokenStream;
+use syn::{FnArg, parse_macro_input};
+
+use quote::{quote, ToTokens};
 
 use change_case::pascal_case;
 
@@ -59,9 +61,23 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let method_args = method.sig.inputs.clone();
                 let trait_name = quote::format_ident!("{}", pascal_case(&method_name.to_string()));
 
+                // let impl_receiver = method_args.clone().iter().nth(0).map(|it| match it {
+                //     FnArg::Receiver(re) => {
+                //         re.clone()
+                //     }
+                //     FnArg::Typed(_) => { panic!("expect receiver") }
+                // }).unwrap();
+                let impl_args = method_args.clone().iter().filter_map(|it| match it {
+                    FnArg::Receiver(_) => {
+                        None
+                    }
+                    FnArg::Typed(ty) => {Some(ty.pat.clone().into_token_stream())}
+                }).collect::<Vec<_>>();
+
+
                 quote! {
                     fn #method_name(#method_args) #method_return_type {
-                        <dyn crate::#method_name::#trait_name>::#method_name(self)
+                        <dyn crate::#method_name::#trait_name>::#method_name(/* #impl_receiver */ self, #(#impl_args)*)
                     }
                 }
             }
