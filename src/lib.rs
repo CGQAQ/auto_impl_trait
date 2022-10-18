@@ -1,47 +1,62 @@
 extern crate core;
 
-use proc_macro::{TokenStream};
-use syn::{FnArg, Item, parse_macro_input, TraitItem};
+use proc_macro::{ TokenStream};
+use syn::{FnArg, Item, parse_macro_input, Token, TraitItem };
 
 use quote::{quote, ToTokens};
+use quote::__private::Span;
 
 use change_case::{pascal_case, snake_case};
 
-struct Trait(pub syn::LitStr);
+#[derive(Debug)]
+struct Trait(pub syn::LitStr, pub syn::Ident);
 
 impl syn::parse::Parse for Trait {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let trait_ = input.parse()?;
-        Ok(Trait(trait_))
+        if input.is_empty() {
+            return Err(syn::Error::new(Span::call_site(), "expected a path to a trait"));
+        } else {
+            let path = input.parse::<syn::LitStr>().expect(r#"
+                first argument must be a string literal
+                for example: `#[auto_impl_trait("./src/rect_trait.rs", Rect)]`
+                "#);
+            input.parse::<Token![,]>().expect(r#"missing comma"#);
+            let ident = input.parse::<syn::Ident>().expect(r#"
+                second argument must be an identifier
+                for example: `#[auto_impl_trait("./src/rect_trait.rs", React)]`
+                "#);
+            return Ok(Trait(path, ident))
+        }
     }
 }
 
 #[proc_macro_attribute]
 pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
-    let attrs = parse_macro_input!(attr as syn::ExprLit);
+    let attrs = parse_macro_input!(attr as Trait);
     let item = parse_macro_input!(item as syn::DeriveInput);
 
     let item_name = item.ident.clone();
 
-    let trait_location = match attrs.lit {
-        syn::Lit::Str(trait_) => Trait(trait_),
-        _ => panic!("Expected a string literal"),
-    };
+    let trait_location = attrs.0.value();
+    let trait_name = attrs.1;
 
-    let trait_content = std::fs::read_to_string(trait_location.0.value())
+    let trait_content = std::fs::read_to_string(trait_location)
         .expect("Something went wrong reading the file");
 
     let file = syn::parse_str::<syn::File>(trait_content.as_str()).unwrap();
 
     let trait_meta =  file.items.iter().find_map(|it| match it {
-        Item::Trait(it) => Some(it),
+        Item::Trait(it) => if it.ident == trait_name {
+            Some(it)
+        } else {
+            None
+        },
         _ => None
-    }).expect("expect trait in file");
+    }).expect(format!("expect trait {} in file", trait_name).as_str());
 
-    let trait_name = trait_meta.ident.clone();
     let trait_functions = trait_meta.items.clone();
-    let trait_function_names = trait_meta
+    let trait_mods = trait_meta
         .items
         .clone()
         .iter()
@@ -64,7 +79,7 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
-    let impl_functions = trait_functions
+    let impl_decls = trait_functions
         .iter()
         .map(|item| match item {
             syn::TraitItem::Method(method) => {
@@ -93,17 +108,27 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
             }
-            _ => panic!("Expected a method"),
+            syn::TraitItem::Type(ty) => {
+                let ty_name = ty.ident.clone();
+                let ty_name_snake = quote::format_ident!("{}", snake_case(ty_name.to_string().as_str()));
+                quote! {
+                    type #ty_name = crate::#ty_name_snake::#ty_name;
+                }
+            }
+            _ => { panic!("Expect Method or Type") }
         })
         .collect::<Vec<_>>();
 
     (quote! {
-        #(#trait_function_names)*
-        #item
+        #(#trait_mods)*
+        mod ____CGQAQ__SUPER_TRAIT____ {
+            #file
+        }
+        use ____CGQAQ__SUPER_TRAIT____::#trait_name;
 
-        #trait_meta
+        #item
         impl #trait_name for #item_name {
-             #(#impl_functions)*
+            #(#impl_decls)*
         }
 
     })

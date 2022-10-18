@@ -1,10 +1,10 @@
 use std::ops::{ Add, Sub, Mul, Div };
 
-trait Rect {
+pub trait Rect {
     type Item: Add + Sub + Mul + Div;
 
-    fn area(&self) -> Item;
-    fn perimeter(&self) -> Item;
+    fn area(&self) -> Self::Item;
+    fn perimeter(&self) -> Self::Item;
 
-    fn scale(&mut self, scale: Item);
+    fn scale(&mut self, scale: Self::Item);
 }
