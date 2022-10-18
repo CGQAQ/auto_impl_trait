@@ -1,9 +1,11 @@
+use crate::Square;
+
 pub trait Perimeter {
-    fn perimeter(&self) -> f64;
+    fn perimeter(&self) -> i32;
 }
 
 impl Perimeter for Square {
-    fn perimeter(&self) -> f64 {
-        self.side * 4.0
+    fn perimeter(&self) -> i32 {
+        self.side * 4
     }
 }

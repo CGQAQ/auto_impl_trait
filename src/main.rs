@@ -1,13 +1,13 @@
 use xxx::auto_impl_trait;
 
-trait Rect {
-    fn area(&self) -> f64;
-    fn perimeter(&self) -> f64;
-}
-
-#[auto_impl_trait(Rect)]
+#[auto_impl_trait("./src/rect_trait.rs")]
 struct Square {
-    side: f64,
+    side: i32,
 }
 
-fn main() {}
+fn main() {
+    let s = Square { side: 3 };
+
+    println!("area: {}", s.area());
+    println!("perimeter: {}", s.perimeter());
+}
