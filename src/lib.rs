@@ -30,7 +30,7 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
     let trait_content = std::fs::read_to_string(trait_location.0.value())
         .expect("Something went wrong reading the file");
 
-    let trait_meta = syn::parse_str::<syn::ItemTrait>(&trait_content).unwrap();
+    let trait_meta = syn::parse_str::<syn::ItemTrait>(trait_content.as_str()).unwrap();
 
     let trait_name = trait_meta.ident.clone();
     let trait_functions = trait_meta.items.clone();
