@@ -55,6 +55,7 @@ version = "0.5.1"
 dependencies = [
  "change-case",
  "proc-macro2",
+ "prost",
  "quote",
  "syn",
  "tonic",
