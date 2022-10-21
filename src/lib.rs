@@ -42,7 +42,7 @@ impl syn::parse::Parse for Trait {
 /// This crate is for internal use only.
 ///
 /// ```ignore
-/// #[auto_impl_trait("./src/rect_trait.rs", Rect)]
+/// #[auto_impl_trait("./src/rect_trait.rs", Rect, "runtime")]
 /// #[doc = "Test this will keep after expand"]
 /// #[derive(Debug)]
 /// struct Square {
@@ -60,12 +60,16 @@ impl syn::parse::Parse for Trait {
 /// mod ____CGQAQ__SUPER_TRAIT____ {
 ///     use std::ops::{Add, Sub, Mul, Div};
 ///
-///     pub trait Rect {
-///         type Item: Add + Sub + Mul + Div;
-///         fn area(&self) -> Self::Item;
-///         fn perimeter(&self) -> Self::Item;
-///         fn scale(&mut self, scale: Self::Item);
+///     pub mod runtime {
+///         pub trait Rect {
+///             type Item: Add + Sub + Mul + Div;
+///             fn area(&self) -> Self::Item;
+///             fn perimeter(&self) -> Self::Item;
+///             fn scale(&mut self, scale: Self::Item);
+///         }
 ///     }
+///
+///     use runtime::Rect
 /// }
 /// use ____CGQAQ__SUPER_TRAIT____::Rect;
 /// #[doc = "Test this will keep after expand"]
