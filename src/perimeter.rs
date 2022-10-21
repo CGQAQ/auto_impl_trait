@@ -1,10 +1,7 @@
-use crate::Square;
+use crate::{Square};
+use crate::__Rect_perimeter__::__Rect_perimeter__;
 
-pub trait Perimeter {
-    fn perimeter(&self) -> i32;
-}
-
-impl Perimeter for Square {
+impl __Rect_perimeter__ for Square {
     fn perimeter(&self) -> i32 {
         self.side * 4
     }

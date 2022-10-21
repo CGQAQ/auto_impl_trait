@@ -8,7 +8,7 @@ struct Square {
 }
 
 fn main() {
-    let mut s =  Square { side: 3 };
+    let mut s = Square { side: 3 };
 
     println!("area: {}", s.area());
     println!("perimeter: {}", s.perimeter());

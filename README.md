@@ -17,9 +17,9 @@ mod area;
 mod perimeter;
 mod scale;
 mod ____CGQAQ__SUPER_TRAIT____ {
-    use std::ops::{Add, Sub, Mul, Div};
-
     pub mod runtime {
+        use std::ops::{Add, Sub, Mul, Div};
+
         pub trait Rect {
             type Item: Add + Sub + Mul + Div;
             fn area(&self) -> Self::Item;
@@ -28,7 +28,22 @@ mod ____CGQAQ__SUPER_TRAIT____ {
         }
     }
 
-    use runtime::Rect
+    pub use runtime::Rect;
+}
+pub mod __Rect_area__ {
+    pub type Item = crate::item::Item;
+
+    pub trait __Rect_area__ { fn area(&self) -> Item; }
+}
+pub mod __Rect_perimeter__ {
+    pub type Item = crate::item::Item;
+
+    pub trait __Rect_perimeter__ { fn perimeter(&self) -> Item; }
+}
+pub mod __Rect_scale__ {
+    pub type Item = crate::item::Item;
+
+    pub trait __Rect_scale__ { fn scale(&mut self, scale: Item); }
 }
 use ____CGQAQ__SUPER_TRAIT____::Rect;
 #[doc = "Test this will keep after expand"]
@@ -38,8 +53,8 @@ struct Square {
 }
 impl Rect for Square {
     type Item = crate::item::Item;
-    fn area(&self) -> Self::Item { <dyn crate::area::Area>::area(self) }
-    fn perimeter(&self) -> Self::Item { <dyn crate::perimeter::Perimeter>::perimeter(self) }
-    fn scale(&mut self, scale: Self::Item) { <dyn crate::scale::Scale>::scale(self, scale) }
+    fn area(&self) -> Self::Item { <dyn __Rect_area__::__Rect_area__>::area(self) }
+    fn perimeter(&self) -> Self::Item { <dyn __Rect_perimeter__::__Rect_perimeter__>::perimeter(self) }
+    fn scale(&mut self, scale: Self::Item) { <dyn __Rect_scale__::__Rect_scale__>::scale(self, scale) }
 }
 ```

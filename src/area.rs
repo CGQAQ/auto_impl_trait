@@ -1,11 +1,8 @@
-use crate::Square;
+use crate::{Square};
+use crate::__Rect_area__::{__Rect_area__, Item};
 
-pub trait Area {
-    fn area(&self) -> i32;
-}
-
-impl Area for Square {
-    fn area(&self) -> i32 {
+impl __Rect_area__ for Square {
+    fn area(&self) -> Item {
         self.side * self.side
     }
 }
