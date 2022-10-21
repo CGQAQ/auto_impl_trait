@@ -13,9 +13,10 @@ dependencies = [
 
 [[package]]
 name = "auto_impl_trait"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "change-case",
+ "proc-macro2",
  "quote",
  "syn",
 ]
