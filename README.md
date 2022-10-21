@@ -31,18 +31,21 @@ mod ____CGQAQ__SUPER_TRAIT____ {
     pub use runtime::Rect;
 }
 pub mod __Rect_area__ {
-    pub type Item = crate::item::Item;
+    pub type Item = super::item::Item;
 
+    #[tonic::async_trait]
     pub trait __Rect_area__ { fn area(&self) -> Item; }
 }
 pub mod __Rect_perimeter__ {
-    pub type Item = crate::item::Item;
+    pub type Item = super::item::Item;
 
+    #[tonic::async_trait]
     pub trait __Rect_perimeter__ { fn perimeter(&self) -> Item; }
 }
 pub mod __Rect_scale__ {
-    pub type Item = crate::item::Item;
+    pub type Item = super::item::Item;
 
+    #[tonic::async_trait]
     pub trait __Rect_scale__ { fn scale(&mut self, scale: Item); }
 }
 use ____CGQAQ__SUPER_TRAIT____::Rect;
@@ -51,8 +54,9 @@ use ____CGQAQ__SUPER_TRAIT____::Rect;
 struct Square {
     side: i32,
 }
+#[tonic::async_trait]
 impl Rect for Square {
-    type Item = crate::item::Item;
+    type Item = super::item::Item;
     fn area(&self) -> Self::Item { <dyn __Rect_area__::__Rect_area__>::area(self) }
     fn perimeter(&self) -> Self::Item { <dyn __Rect_perimeter__::__Rect_perimeter__>::perimeter(self) }
     fn scale(&mut self, scale: Self::Item) { <dyn __Rect_scale__::__Rect_scale__>::scale(self, scale) }
