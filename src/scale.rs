@@ -1,8 +1,7 @@
-use crate::{Square};
-use crate::__Rect_scale__::{__Rect_scale__, Item};
+use crate::Square;
 
-impl __Rect_scale__ for Square {
-    fn scale(&mut self, scale: Item) {
+impl Square {
+    pub fn scale(&mut self, scale: i32) {
         self.side *= scale;
     }
 }

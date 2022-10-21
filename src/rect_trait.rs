@@ -3,6 +3,7 @@ pub mod runtime {
 
     pub trait Rect {
         type Item: Add + Sub + Mul + Div;
+        const ZERO: Self::Item;
 
         fn area(&self) -> Self::Item;
         fn perimeter(&self) -> Self::Item;

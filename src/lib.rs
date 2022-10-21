@@ -1,4 +1,8 @@
+#![feature(proc_macro_span)]
+
 use proc_macro::TokenStream;
+use std::path::{Path, PathBuf};
+use proc_macro2::Ident;
 use syn::{
     parse_macro_input, FnArg, Item, ItemMod, Token, TraitItem, TraitItemMethod,
 };
@@ -6,15 +10,124 @@ use syn::{
 use quote::__private::Span;
 use quote::{quote, ToTokens};
 
-use proc_macro2::Ident;
-
-#[inline]
-fn gen_sub_trait_name(tname: &str, fname: &str) -> Ident {
-    quote::format_ident!("__{}_{}__", tname, fname)
-}
+const PLACEHOLDER: &str = "__please_change_me__";
 
 #[derive(Debug)]
 struct Trait(pub syn::LitStr, pub syn::Ident, pub syn::LitStr);
+
+#[inline]
+fn get_path(file_name: &str) -> PathBuf {
+    dbg!(Span::call_site().unwrap().source_file().path().with_file_name(format!("{}{}", file_name, ".rs")));
+    Span::call_site().unwrap().source_file().path().with_file_name(format!("{}{}", file_name, ".rs"))
+}
+
+#[inline]
+fn is_path_not_crate_root(path: PathBuf) -> bool {
+    path.file_name().unwrap().to_str().unwrap() != "lib.rs" &&
+        path.file_name().unwrap().to_str().unwrap() != "main.rs"
+}
+
+#[inline]
+fn is_not_crate_root() -> bool {
+    is_path_not_crate_root(Span::call_site().unwrap().source_file().path())
+}
+
+#[inline]
+fn get_method_filename(method_name: &str) -> String {
+    format!("__method_{}", change_case::snake_case(method_name))
+}
+
+#[inline]
+fn get_type_filename(type_name: &str) -> String {
+    format!("__type_{}", change_case::snake_case(type_name))
+}
+
+#[inline]
+fn get_const_filename(const_name: &str) -> String {
+    format!("__const_{}", change_case::snake_case(const_name))
+}
+
+#[inline]
+fn ensure_interface(item: &TraitItem, struct_name: &syn::Ident) {
+    let PLACEHOLDER_IDENT = Ident::new(PLACEHOLDER, Span::call_site());
+
+    match item {
+        TraitItem::Const(c) => {
+            let mod_name = get_const_filename(c.ident.to_string().as_str());
+            let mod_ident = c.ident.clone();
+            let mut mod_type = c.ty.clone();
+            if is_path_not_crate_root(get_path(&mod_name)) {
+                if let syn::Type::Path(p) = &mut mod_type {
+                    if p.path.segments.first().unwrap().ident.to_string() == "Self" {
+                        p.path.segments.first_mut().unwrap().ident = Ident::new("super", Span::call_site());
+                    }
+                }
+            } else {
+                if let syn::Type::Path(p) = &mut mod_type {
+                    if p.path.segments.first().unwrap().ident.to_string() == "Self" {
+                        p.path.segments.first_mut().unwrap().ident = Ident::new("crate", Span::call_site());
+                    }
+                }
+            }
+            if !std::path::Path::exists(&*get_path(mod_name.as_str())) {
+                std::fs::write(get_path(mod_name.as_str()), (quote! {
+                    pub const #mod_ident: #mod_type = #PLACEHOLDER_IDENT;
+                }).to_string()).expect(format!("write file {} failed", mod_name).as_str());
+            }
+        }
+        TraitItem::Method(m) => {
+            let mod_name = get_method_filename(m.sig.ident.to_string().as_str());
+            let mod_ident = m.sig.ident.clone();
+            let mod_args = m.sig.inputs.clone();
+            let mod_return = m.sig.output.clone();
+            let mod_asyncness = m.sig.asyncness;
+            let mod_constness = m.sig.constness;
+            let mod_unsafety = m.sig.unsafety;
+            let mod_abi = m.sig.abi.clone();
+            let mod_where_clause = m.sig.generics.where_clause.clone();
+            let mod_fn = m.sig.fn_token;
+
+            if !std::path::Path::exists(&*get_path(mod_name.as_str())) {
+                mod_args.iter_mut().for_each(|it| match it{
+                    FnArg::Receiver(_) => {}
+                    FnArg::Typed(t) => {
+                        if let syn::Type::Path(p) = &mut t.ty {
+                            if p.path.segments.first().unwrap().ident.to_string() == "Self" {
+                                p.path.segments.first_mut().unwrap().ident = Ident::new("super", Span::call_site());
+                            }
+                        }
+                    }
+                })
+
+                std::fs::write(get_path(mod_name.as_str()), (quote! {
+                    use super::#struct_name;
+
+                    impl #struct_name {
+                        pub #mod_abi #mod_unsafety #mod_constness #mod_asyncness #mod_fn #mod_ident(#mod_args) #mod_return #mod_where_clause {
+                            unimplemented!(#PLACEHOLDER);
+                        }
+                    }
+                }).to_string()).expect(format!("write file {} failed", mod_name).as_str());
+            }
+        }
+        TraitItem::Type(t) => {
+            let mod_name = get_type_filename(t.ident.to_string().as_str());
+            let mod_ident = t.ident.clone();
+            let mod_generics = t.generics.clone();
+            let mod_where_clause = t.generics.where_clause.clone();
+            let mod_type = t.type_token;
+
+            if !std::path::Path::exists(&*get_path(mod_name.as_str())) {
+                std::fs::write(get_path(mod_name.as_str()), (quote! {
+                    pub #mod_type #mod_ident #mod_generics #mod_where_clause = #PLACEHOLDER_IDENT;
+                }).to_string()).expect(format!("write file {} failed", mod_name).as_str());
+            }
+        }
+        _ => {
+            panic!("Only Const, Method, and Type are supported in the trait");
+        }
+    }
+}
 
 impl syn::parse::Parse for Trait {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -119,7 +232,7 @@ impl syn::parse::Parse for Trait {
 pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Construct a string representation of the type definition
     let attrs = parse_macro_input!(attr as Trait);
-    let item = parse_macro_input!(item as syn::DeriveInput);
+    let item = parse_macro_input!(item as syn::ItemStruct);
 
     let item_name = item.ident.clone();
 
@@ -234,79 +347,11 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let trait_items = trait_meta.items.clone();
-    let trait_items_types = trait_items
-        .iter()
-        .filter_map(|it| match it {
-            TraitItem::Type(ty) => {
-                let ty_name = ty.ident.clone();
-                let ty_name_snake =
-                    quote::format_ident!("{}", change_case::snake_case(ty_name.to_string().as_str()));
-                Some(quote! {
-                    type #ty_name = crate::#ty_name_snake::#ty_name;
-                })
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let trait_item_funcs: Vec<TraitItemMethod> = trait_meta
-        .items
-        .iter()
-        .filter_map(|it| {
-            if let TraitItem::Method(it) = it {
-                Some(it.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
 
-    let sub_traits: Vec<_> = trait_item_funcs
-        .iter()
-        .map(|it| {
-            let gen_trait_name = gen_sub_trait_name(
-                trait_name.to_string().as_str(),
-                it.sig.ident.to_string().as_str(),
-            );
+    dbg!(&trait_items);
 
-            let mut it = it.clone();
-            if let syn::ReturnType::Type(_, ty) = &mut it.sig.output {
-                if let syn::Type::Path(p) = ty.as_mut() {
-                    if p.path.segments.first().unwrap().ident == "Self" {
-                        let last = p.path.segments.last().unwrap().clone();
-                        p.path.segments.clear();
-                        p.path.segments.push(last);
-                    }
-                }
-            }
-
-            it.sig.inputs.iter_mut().for_each(|it| {
-                if let syn::FnArg::Typed(t) = it {
-                    if let syn::Type::Path(p) = t.ty.as_mut() {
-                        if p.path.segments.first().unwrap().ident == "Self" {
-                            let last = p.path.segments.last().unwrap().clone();
-                            p.path.segments.clear();
-                            p.path.segments.push(last);
-                        }
-                    }
-                }
-            });
-
-            quote! {
-                // trait #gen_trait_name {
-                //     #(#trait_items_types)*
-                //     #it
-                // }
-                // TODO: swap to upper one as soon as rustc support it "error[E0658]: associated type defaults are unstable"
-                pub mod #gen_trait_name {
-                    #(pub #trait_items_types)*
-                    #[tonic::async_trait]
-                    pub trait #gen_trait_name {
-                        #it
-                    }
-                }
-            }
-        })
-        .collect();
+    // TODO(CGQAQ): make this behind flag
+    trait_items.iter().for_each(|it| ensure_interface(it, &item_name));
 
     let trait_mods = trait_meta
         .items
@@ -314,20 +359,27 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
         .iter()
         .map(|it| match it {
             TraitItem::Method(method) => {
-                let method_name = method.sig.ident.clone();
+                let method_name = quote::format_ident!("{}", get_method_filename(method.sig.ident.to_string().as_str()));
                 return quote! {
-                mod # method_name;
+                    mod #method_name;
                 };
             }
             TraitItem::Type(ty) => {
                 let ty_name =
-                    quote::format_ident!("{}", change_case::snake_case(ty.ident.clone().to_string().as_str()));
+                    quote::format_ident!("{}", get_type_filename(ty.ident.to_string().as_str()));
                 return quote! {
-                mod # ty_name;
+                    mod #ty_name;
+                };
+            }
+            TraitItem::Const(c) => {
+                let const_name =
+                    quote::format_ident!("{}", get_const_filename(c.ident.to_string().as_str()));
+                return quote! {
+                    mod #const_name;
                 };
             }
             _ => {
-                panic!("Expect Method or Type")
+                panic!("Expect Method, Type or Const");
             }
         })
         .collect::<Vec<_>>();
@@ -339,17 +391,7 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let method_name = method.sig.ident.clone();
                 let method_return_type = method.sig.output.clone();
                 let method_args = method.sig.inputs.clone();
-                let trait_name = gen_sub_trait_name(
-                    trait_name.to_string().as_str(),
-                    method_name.to_string().as_str(),
-                );
 
-                // let impl_receiver = method_args.clone().iter().nth(0).map(|it| match it {
-                //     FnArg::Receiver(re) => {
-                //         re.clone()
-                //     }
-                //     FnArg::Typed(_) => { panic!("expect receiver") }
-                // }).unwrap();
                 let impl_args = method_args
                     .clone()
                     .iter()
@@ -360,17 +402,47 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
                     .collect::<Vec<_>>();
 
                 quote! {
-                fn #method_name( # method_args) # method_return_type {
-                < dyn #trait_name::#trait_name >::#method_name(/* #impl_receiver */ self, # ( # impl_args) * )
-                }
+                    fn #method_name( # method_args) # method_return_type {
+                        self.#method_name(#(#impl_args)*)
+                    }
                 }
             }
             syn::TraitItem::Type(ty) => {
                 let ty_name = ty.ident.clone();
                 let ty_name_snake =
-                    quote::format_ident!("{}", change_case::snake_case(ty_name.to_string().as_str()));
-                quote! {
-                type # ty_name = crate::# ty_name_snake::#ty_name;
+                    quote::format_ident!("{}", get_type_filename(ty.ident.to_string().as_str()));
+                if is_not_crate_root() {
+                    quote! {
+                        type #ty_name = super::#ty_name_snake::#ty_name;
+                    }
+                } else {
+                    quote! {
+                        type #ty_name = crate::#ty_name_snake::#ty_name;
+                    }
+                }
+            }
+            syn::TraitItem::Const(c) => {
+                let const_name = c.ident.clone();
+                let mut const_ty = c.ty.clone();
+                let const_name_snake =
+                    quote::format_ident!("{}", get_const_filename(c.ident.to_string().as_str()));
+
+                if let syn::Type::Path(ref mut p) = const_ty {
+                    if p.path.segments.first().expect("expect path segment").ident.to_string() == "Self" {
+                        let type_name_snake =
+                            quote::format_ident!("{}", get_type_filename(p.path.segments.last().unwrap().ident.to_string().as_str()));
+                        p.path.segments.first_mut().unwrap().ident = type_name_snake.clone();
+                    }
+                }
+
+                if is_not_crate_root() {
+                    quote! {
+                        const #const_name: super::#const_ty = super::#const_name_snake::#const_name;
+                    }
+                } else {
+                    quote! {
+                        const #const_name: crate::#const_ty = crate::#const_name_snake::#const_name;
+                    }
                 }
             }
             _ => {
@@ -389,15 +461,12 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
             // ___INJECTED BY auto_impl_trait: 3rd argument___
             pub use #prefix_parsed::#trait_name;
         }
-        // ___INJECTED BY auto_impl_trait: gen SUB TRAIT___
-        #(#sub_traits)*
         // ___INJECTED BY auto_impl_trait: publish SUPER TRAIT___
         use ____CGQAQ__SUPER_TRAIT____::#trait_name;
 
         // ___INJECTED BY auto_impl_trait: ORIGINAL SOURCE___
         #item
         // ___INJECTED BY auto_impl_trait: impl block___
-        // TODO: Check if async_trait needed
         #[tonic::async_trait]
         impl #trait_name for #item_name {
             #(#impl_decls)*

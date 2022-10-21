@@ -1,0 +1,1 @@
+pub const ZERO : i32 = 0 ;
