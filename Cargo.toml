@@ -17,3 +17,4 @@ syn = {version = "1.0", features = ["full", "extra-traits"]}
 quote = "1.0"
 change-case = "0.2.0"
 proc-macro2 = "1.0.47"
+tonic = "0.8.2"

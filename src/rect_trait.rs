@@ -9,6 +9,6 @@ pub mod runtime {
 
         fn scale(&mut self, scale: Self::Item);
 
-        fn async_test() {}
+        // fn async_test() {}
     }
 }
