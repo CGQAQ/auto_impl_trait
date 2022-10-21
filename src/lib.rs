@@ -162,7 +162,7 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             #file
 
             #[tonic::async_trait]
-            impl super::super::#trait_name for super::super::#struct_name {
+            impl super::#trait_name for super::#struct_name {
                 #(#trait_items)*
             }
         }
