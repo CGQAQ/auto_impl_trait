@@ -161,14 +161,12 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
         mod #super_mod {
             #file
 
-            mod #super_mod {
-                #[tonic::async_trait]
-                impl super::super::#trait_name for super::super::#struct_name {
-                    #(#trait_items)*
-                }
+            #[tonic::async_trait]
+            impl super::super::#trait_name for super::super::#struct_name {
+                #(#trait_items)*
             }
-            use #super_mod::*;
         }
-        #use_block
+        #use_block;
+        use #super_mod::*;
     }).into()
 }
