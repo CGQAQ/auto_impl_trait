@@ -299,6 +299,7 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
                 // TODO: swap to upper one as soon as rustc support it "error[E0658]: associated type defaults are unstable"
                 pub mod #gen_trait_name {
                     #(pub #trait_items_types)*
+                    #[tonic::async_trait]
                     pub trait #gen_trait_name {
                         #it
                     }
@@ -396,6 +397,8 @@ pub fn auto_impl_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
         // ___INJECTED BY auto_impl_trait: ORIGINAL SOURCE___
         #item
         // ___INJECTED BY auto_impl_trait: impl block___
+        // TODO: Check if async_trait needed
+        #[tonic::async_trait]
         impl #trait_name for #item_name {
             #(#impl_decls)*
         }

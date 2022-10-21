@@ -8,5 +8,7 @@ pub mod runtime {
         fn perimeter(&self) -> Self::Item;
 
         fn scale(&mut self, scale: Self::Item);
+
+        fn async_test() {}
     }
 }
