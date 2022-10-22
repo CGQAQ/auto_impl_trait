@@ -229,5 +229,6 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
         pub #use_block
+        pub use #super_mod::*;
     }).into()
 }
