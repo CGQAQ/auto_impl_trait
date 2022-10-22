@@ -5,13 +5,66 @@ use proc_macro::{TokenStream};
 
 use proc_macro2::Span;
 use quote::{quote, ToTokens};
-use syn::{Ident, TraitItem, Block};
+use syn::{Ident, TraitItem, Block, Token, Type, TypePath, AngleBracketedGenericArguments, GenericArgument, ConstParam};
+use syn::visit_mut::{visit_angle_bracketed_generic_arguments_mut, visit_const_param_mut, visit_type_path_mut, VisitMut};
 
 const SUPER_MOD: &str = "____CGQAQ__SUPER_TRAIT____";
 const RUNTIME_MOD: &str = "runtime_service_server";
 const RUNTIME_TRAIT: &str = "RuntimeService";
 const IMAGE_MOD: &str = "image_service_server";
 const IMAGE_TRAIT: &str = "ImageService";
+
+#[inline]
+fn remove_fisrt(segments: &mut syn::punctuated::Punctuated<syn::PathSegment, syn::Token![::]>) {
+    let mut segment: syn::punctuated::Punctuated<_, Token![::]> = syn::punctuated::Punctuated::new();
+    segments.iter().skip(1).for_each(|it| segment.push(it.clone()));
+    segments.clear();
+    segments.extend(segment);
+}
+
+struct SuperRemover;
+
+impl VisitMut for SuperRemover {
+    fn visit_type_path_mut(&mut self, i: &mut TypePath) {
+        visit_type_path_mut(self, i);
+
+        if i.path.segments.len() > 1 {
+            if i.path.segments.first().unwrap().ident == "super" {
+                remove_fisrt(&mut i.path.segments);
+            }
+        }
+    }
+
+    fn visit_const_param_mut(&mut self, i: &mut ConstParam) {
+        visit_const_param_mut(self, i);
+
+        match &mut i.ty {
+            Type::Path(p) => {
+                self.visit_type_path_mut(&mut p.clone());
+            }
+            _ => { /* NOOP */ }
+        }
+    }
+
+
+    fn visit_angle_bracketed_generic_arguments_mut(&mut self, i: &mut AngleBracketedGenericArguments) {
+        visit_angle_bracketed_generic_arguments_mut(self, i);
+        i.args.iter_mut().for_each(|it| {
+            match it {
+                GenericArgument::Type(t) => {
+                    match t {
+                        Type::Path(p) => {
+                            self.visit_type_path_mut( p);
+                        }
+                        _ => {}
+                    }
+                }
+                GenericArgument::Constraint(_) => {}
+                _ => {}
+            }
+        })
+    }
+}
 
 #[derive(Clone, Copy)]
 enum ServiceType {
@@ -112,13 +165,16 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
         match it {
             TraitItem::Method(m) => {
                 let name = quote::format_ident!("{}", m.sig.ident);
-                let args = m.sig.inputs.iter().filter_map(|it| {
+
+                SuperRemover.visit_trait_item_method_mut(m);
+
+                let args = m.sig.inputs.iter_mut().filter_map(|it| {
                     match it {
                         syn::FnArg::Typed(t) => {
                             match *t.pat {
-                                syn::Pat::Ident(ref i) => {
+                                syn::Pat::Ident(ref mut i) => {
                                     Some(i.ident.clone())
-                                }
+                                },
                                 _ => None,
                             }
                         }
@@ -126,9 +182,15 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }).collect::<Vec<_>>();
 
-                m.default = Some(syn::parse::<Block>(TokenStream::from(quote! {
+                if m.sig.asyncness.is_some() {
+                    m.default = Some(syn::parse::<Block>(TokenStream::from(quote! {
+                        {self.#name(#(#args),*).await}
+                    }.to_token_stream())).unwrap());
+                } else {
+                    m.default = Some(syn::parse::<Block>(TokenStream::from(quote! {
                         {self.#name(#(#args),*)}
-                }.to_token_stream())).unwrap());
+                    }.to_token_stream())).unwrap());
+                }
 
                 Some(quote! {
                     #m
@@ -137,7 +199,7 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             TraitItem::Type(t) => {
                 let name = quote::format_ident!("{}", t.ident);
                 Some(quote! {
-                    type #name = #name;
+                    type #name = super::#name;
                 })
             }
             _ => { None /* not used */ }
@@ -166,7 +228,6 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #(#trait_items)*
             }
         }
-        #use_block;
-        use #super_mod::*;
+        pub #use_block
     }).into()
 }

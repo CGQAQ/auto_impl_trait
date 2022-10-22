@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "auto_impl_trait"
-version = "0.6.0"
+version = "0.6.2"
 dependencies = [
  "change-case",
  "proc-macro2",
