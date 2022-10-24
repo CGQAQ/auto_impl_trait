@@ -1,6 +1,5 @@
+use tonic::Request;
 use auto_impl_trait::auto_impl;
-
-// pub type GetContainerEventsStream = i32;
 
 #[auto_impl(image)]
 pub struct Square {
@@ -8,4 +7,6 @@ pub struct Square {
 }
 
 fn main() {
+    let square = Square { side: 5 };
+    square.list_images(Request::new(v1::ListImagesRequest::default()));
 }

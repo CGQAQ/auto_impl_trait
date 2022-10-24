@@ -1,14 +1,13 @@
-#[cfg(all(feature = "v1", feature = "v1alpha2"))]
-compile_error!("features `v1` and `v1alpha2` are mutually exclusive");
+// #[cfg(all(feature = "v1", feature = "v1alpha2"))]
+// compile_error!("features `v1` and `v1alpha2` are mutually exclusive");
 
 use proc_macro::{TokenStream};
 
 use proc_macro2::Span;
 use quote::{quote, ToTokens};
-use syn::{Ident, TraitItem, Block, Token, Type, TypePath, AngleBracketedGenericArguments, GenericArgument, ConstParam};
-use syn::visit_mut::{visit_angle_bracketed_generic_arguments_mut, visit_const_param_mut, visit_type_path_mut, VisitMut};
+use syn::{Ident, TraitItem, Block, Token, Type, TypePath, AngleBracketedGenericArguments, GenericArgument, ConstParam, ItemMod};
+use syn::visit_mut::{visit_angle_bracketed_generic_arguments_mut, visit_const_param_mut, visit_item_mod_mut, visit_type_path_mut, VisitMut};
 
-const SUPER_MOD: &str = "____CGQAQ__SUPER_TRAIT____";
 const RUNTIME_MOD: &str = "runtime_service_server";
 const RUNTIME_TRAIT: &str = "RuntimeService";
 const IMAGE_MOD: &str = "image_service_server";
@@ -54,7 +53,7 @@ impl VisitMut for SuperRemover {
                 GenericArgument::Type(t) => {
                     match t {
                         Type::Path(p) => {
-                            self.visit_type_path_mut( p);
+                            self.visit_type_path_mut(p);
                         }
                         _ => {}
                     }
@@ -63,6 +62,30 @@ impl VisitMut for SuperRemover {
                 _ => {}
             }
         })
+    }
+}
+
+struct RuntimeRedundantRemover;
+impl VisitMut for RuntimeRedundantRemover {
+    fn visit_item_mod_mut(&mut self, i: &mut ItemMod) {
+        visit_item_mod_mut(self, i);
+
+        // remove redundant mod
+        if i.ident == IMAGE_MOD {
+            i.vis = syn::Visibility::Inherited;
+        }
+    }
+}
+
+struct ImageRedundantRemover;
+impl VisitMut for ImageRedundantRemover {
+    fn visit_item_mod_mut(&mut self, i: &mut ItemMod) {
+        visit_item_mod_mut(self, i);
+
+        // remove redundant mod
+        if i.ident == RUNTIME_MOD {
+            i.vis = syn::Visibility::Inherited;
+        }
     }
 }
 
@@ -111,22 +134,17 @@ impl syn::parse::Parse for ServiceType {
     }
 }
 
-///
-/// This crate is for internal use only.
-///
-#[proc_macro_attribute]
-pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let service_type = syn::parse_macro_input!(attr as ServiceType);
-    let struct_ast = syn::parse_macro_input!(item as syn::ItemStruct);
+fn expand(file_content: String, container: Ident, service_type: &ServiceType, struct_ast: &syn::ItemStruct) -> proc_macro2::TokenStream {
+    let mut file = syn::parse_file(&*file_content).expect("parse file faild");
 
-    let super_mod = Ident::new(SUPER_MOD, Span::call_site());
-
-    #[cfg(feature = "v1")]
-        let file_content = std::fs::read_to_string("./proto/runtime.v1.rs").expect("read ./proto/runtime.v1.rs faild");
-    #[cfg(feature = "v1alpha2")]
-        let file_content = std::fs::read_to_string("./proto/runtime.v1alpha2.rs").expect("read ./proto/runtime.v1alpha2.rs faild");
-
-    let file = syn::parse_file(&*file_content).expect("parse file faild");
+    match &service_type {
+        ServiceType::Runtime => {
+            RuntimeRedundantRemover.visit_file_mut(&mut file);
+        }
+        ServiceType::Image => {
+            ImageRedundantRemover.visit_file_mut(&mut file);
+        }
+    }
 
     let struct_name = struct_ast.ident.clone();
     let trait_name = quote::format_ident!("{}", service_type.get_trait());
@@ -174,7 +192,7 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                             match *t.pat {
                                 syn::Pat::Ident(ref mut i) => {
                                     Some(i.ident.clone())
-                                },
+                                }
                                 _ => None,
                             }
                         }
@@ -206,29 +224,72 @@ pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    let trait_alias = quote::format_ident!("{}_{}", service_type.get_trait(), container);
+
     let use_block = match service_type {
-        ServiceType::Runtime =>
+        ServiceType::Runtime => {
             quote! {
-                use ____CGQAQ__SUPER_TRAIT____::runtime_service_server::RuntimeService;
-            },
-        ServiceType::Image =>
-            quote! {
-                use ____CGQAQ__SUPER_TRAIT____::image_service_server::ImageService;
+                use #container::runtime_service_server::#trait_name as #trait_alias;
             }
+        }
+        ServiceType::Image => {
+            quote! {
+                use #container::image_service_server::#trait_name as #trait_alias;
+            }
+        }
     };
 
     (quote! {
-        #struct_ast
-
-        mod #super_mod {
+        pub mod #container {
             #file
 
             #[tonic::async_trait]
-            impl super::#trait_name for super::#struct_name {
+            impl super::#trait_alias for super::#struct_name {
                 #(#trait_items)*
             }
         }
-        pub #use_block
-        pub use #super_mod::*;
+        #use_block
+    }).into()
+}
+
+///
+/// This crate is for internal use only.
+///
+#[proc_macro_attribute]
+pub fn auto_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let service_type = syn::parse_macro_input!(attr as ServiceType);
+    let struct_ast = syn::parse_macro_input!(item as syn::ItemStruct);
+
+
+    let file_content_v1 = std::fs::read_to_string("./proto/runtime.v1.rs").expect("read ./proto/runtime.v1.rs faild");
+    let file_content_v1alpha2 = std::fs::read_to_string("./proto/runtime.v1alpha2.rs").expect("read ./proto/runtime.v1alpha2.rs faild");
+
+    let container_v1 = quote::format_ident!("v1");
+    let v1 = expand(file_content_v1, container_v1, &service_type, &struct_ast);
+    let container_v1alpha2 = quote::format_ident!("v1alpha2");
+    let v1alpha2 = expand(file_content_v1alpha2, container_v1alpha2, &service_type, &struct_ast);
+
+
+    let doc = match &service_type {
+        ServiceType::Runtime => {
+            quote! {
+                #[doc = "Generated by `#[derive(auto_impl(runtime))]`"]
+            }
+        }
+        ServiceType::Image => {
+            quote! {
+                #[doc = "Generated by `#[derive(auto_impl(image))]`"]
+            }
+        }
+    };
+
+    (quote! {
+        #doc
+        #struct_ast
+
+        #[doc = "Version v1 impls generated by auto_impl"]
+        #v1
+        #[doc = "Version v1alpha2 Impls generated by auto_impl"]
+        #v1alpha2
     }).into()
 }
